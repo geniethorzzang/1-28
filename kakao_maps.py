@@ -6,11 +6,19 @@ import json
 import requests
 from streamlit_sortables import sort_items  # 순서 변경용 라이브러리 추가!
 
-# 1. 환경변수 로드
+# 1. 환경변수 로드 (클라우드 & 로컬 둘 다 되게 수정함!)
 load_dotenv()
-kakao_api_key = os.getenv("KAKAO_MAP_API_KEY")
-weather_api_key = os.getenv("WEATHER_API_KEY")
-exchange_api_key = os.getenv("EXCHANGE_API_KEY")
+
+try:
+    # 스트림릿 클라우드 설정(Secrets)에서 먼저 찾는다
+    kakao_api_key = st.secrets["KAKAO_MAP_API_KEY"]
+    weather_api_key = st.secrets["WEATHER_API_KEY"]
+    exchange_api_key = st.secrets["EXCHANGE_API_KEY"]
+except:
+    # 없으면(내 컴퓨터면) .env 파일에서 찾는다
+    kakao_api_key = os.getenv("KAKAO_MAP_API_KEY")
+    weather_api_key = os.getenv("WEATHER_API_KEY")
+    exchange_api_key = os.getenv("EXCHANGE_API_KEY")
 
 # 페이지 설정
 st.set_page_config(layout="wide", page_title="Korea Travel Guide: Pro Ver.")
