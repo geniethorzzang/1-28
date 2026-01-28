@@ -1,0 +1,49 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
+    <script type="text/javascript" src="https://openapi.map.naver.com/openapi/v3/maps.js?ncpClientId=qktTbY9xIbEnTrWrArCm"></script>
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; width: 100%; }
+        #map { width: 100%; height: 100%; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <script>
+        // 지도 옵션
+        var mapOptions = {
+            center: new naver.maps.LatLng(37.5665, 126.9780),
+            zoom: 15,
+            scaleControl: true,
+            logoControl: false,
+            mapDataControl: false,
+            zoomControl: true
+        };
+        
+        var map = new naver.maps.Map('map', mapOptions);
+
+        // 현재 위치 찾기 (브라우저 GPS)
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(function(position) {
+                var lat = position.coords.latitude;
+                var lng = position.coords.longitude;
+                var myPos = new naver.maps.LatLng(lat, lng);
+
+                map.setCenter(myPos);
+                
+                new naver.maps.Marker({
+                    position: myPos,
+                    map: map,
+                    title: "내 위치",
+                    animation: naver.maps.Animation.BOUNCE
+                });
+            }, function(error) {
+                console.error("GPS 에러: " + error.message);
+            });
+        }
+    </script>
+</body>
+</html>
