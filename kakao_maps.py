@@ -301,7 +301,7 @@ html_code = f"""
 <head>
     <meta charset="utf-8">
     <title>Kakao Map</title>
-    <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey={kakao_api_key}"></script>
+    <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey={kakao_api_key}"></script>
     <style>
         html, body {{ margin: 0; padding: 0; height: 100%; }}
         #map {{ width: 100%; height: 500px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
