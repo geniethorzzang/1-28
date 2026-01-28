@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 import streamlit.components.v1 as components
 import json
 import requests
+from streamlit_sortables import sort_items  # 순서 변경용 라이브러리 추가!
 
 # 1. 환경변수 로드
 load_dotenv()
@@ -31,7 +32,7 @@ def get_exchange_rate():
         return response.json()['conversion_rates']['KRW'] if response.status_code == 200 else None
     except: return None
 
-# 2. 데이터 준비 (전국 10개 도시, 관광지 5곳 & 맛집 5곳 풀세팅)
+# 2. 데이터 준비 (전국 10개 도시 풀 데이터)
 city_data = {
     "서울 (Seoul)": {"lat": 37.5665, "lng": 126.9780, 
         "spots": [
@@ -215,7 +216,7 @@ with st.sidebar:
     selected_city_name = st.selectbox("Choose a city:", list(city_data.keys()))
     city_info = city_data[selected_city_name]
     
-    # --- 날씨 정보 표시 (도시 선택하면 바뀜) ---
+    # --- 날씨 정보 표시 ---
     weather_data = get_weather(city_info['lat'], city_info['lng'])
     if weather_data:
         temp = weather_data['main']['temp']
@@ -256,28 +257,44 @@ with st.sidebar:
         default_foods = []
     selected_foods = st.multiselect("Restaurants (⭐3.5+):", options=list(food_options.keys()), default=default_foods)
     
-    st.info("💡 Uncheck 'Select All' to customize your list!")
+    st.divider()
 
-# 지도 데이터 정리
+    # --- 순서 정하기 (여기가 핵심!) ---
+    st.header("4. Plan Your Route (Drag & Drop)")
+    st.caption("Drag items to reorder your itinerary.")
+    
+    combined_items = selected_spots + selected_foods
+    
+    # streamlit-sortables를 이용한 드래그 앤 드롭 목록
+    if combined_items:
+        sorted_items = sort_items(combined_items, direction='vertical')
+    else:
+        sorted_items = []
+
+    st.info("💡 Map updates automatically based on this order!")
+
+# 지도 데이터 정리 (정렬된 순서대로 마커 생성)
 markers = []
 path_coords = []
 
-# 선택한 데이터 마커 추가
-for key in selected_spots:
-    data = spot_options[key]
-    markers.append({"name": data['name'], "lat": data['lat'], "lng": data['lng'], "type": "Spot"})
-    path_coords.append({"lat": data['lat'], "lng": data['lng']})
-
-for key in selected_foods:
-    data = food_options[key]
-    markers.append({"name": data['name'], "lat": data['lat'], "lng": data['lng'], "type": "Food"})
-    path_coords.append({"lat": data['lat'], "lng": data['lng']})
+# sorted_items 순서대로 데이터 찾아서 넣기
+for key in sorted_items:
+    # 관광지에서 찾기
+    if key in spot_options:
+        data = spot_options[key]
+        markers.append({"name": data['name'], "lat": data['lat'], "lng": data['lng'], "type": "Spot"})
+        path_coords.append({"lat": data['lat'], "lng": data['lng']})
+    # 맛집에서 찾기
+    elif key in food_options:
+        data = food_options[key]
+        markers.append({"name": data['name'], "lat": data['lat'], "lng": data['lng'], "type": "Food"})
+        path_coords.append({"lat": data['lat'], "lng": data['lng']})
 
 markers_json = json.dumps(markers)
 center_lat = city_info['lat']
 center_lng = city_info['lng']
 
-# 카카오맵 HTML/JS 코드 (Geolocation 제거됨)
+# 카카오맵 HTML/JS 코드
 html_code = f"""
 <!DOCTYPE html>
 <html>
@@ -298,8 +315,6 @@ html_code = f"""
         var map = new kakao.maps.Map(container, options);
         var markers = {markers_json};
         var linePath = [];
-
-        // Geolocation code removed as requested
 
         markers.forEach(function(m) {{
             var position = new kakao.maps.LatLng(m.lat, m.lng);
@@ -327,15 +342,11 @@ html_code = f"""
 components.html(html_code, height=520)
 
 st.divider()
-if len(selected_spots) + len(selected_foods) > 0:
-    st.subheader("📋 Your Custom Itinerary")
-    st.write(f"**Current City:** {selected_city_name}")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("#### 🚩 Spots")
-        for spot in selected_spots: st.write(f"- {spot}")
-    with col2:
-        st.markdown("#### 🍴 Restaurants")
-        for food in selected_foods: st.write(f"- {food}")
+if len(sorted_items) > 0:
+    st.subheader("📋 Your Final Itinerary")
+    st.write(f"**City:** {selected_city_name}")
+    
+    for i, item in enumerate(sorted_items, 1):
+        st.write(f"**{i}.** {item}")
 else:
-    st.write("👈 Select spots and restaurants to create your route.")
+    st.write("👈 Select and order your spots to create a route.")
