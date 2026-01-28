@@ -4,28 +4,43 @@ from dotenv import load_dotenv
 import streamlit.components.v1 as components
 import json
 import requests
-from streamlit_sortables import sort_items  # 순서 변경용 라이브러리 추가!
+from streamlit_sortables import sort_items
 
-# 1. 환경변수 로드 (클라우드 & 로컬 둘 다 되게 수정함!)
+# 1. 환경변수 로드 (클라우드 & 로컬 호환)
 load_dotenv()
 
 try:
-    # 스트림릿 클라우드 설정(Secrets)에서 먼저 찾는다
+    # 스트림릿 클라우드 설정(Secrets)에서 먼저 찾기
     kakao_api_key = st.secrets["KAKAO_MAP_API_KEY"]
     weather_api_key = st.secrets["WEATHER_API_KEY"]
     exchange_api_key = st.secrets["EXCHANGE_API_KEY"]
 except:
-    # 없으면(내 컴퓨터면) .env 파일에서 찾는다
+    # 없으면 로컬 .env 파일에서 찾기
     kakao_api_key = os.getenv("KAKAO_MAP_API_KEY")
     weather_api_key = os.getenv("WEATHER_API_KEY")
     exchange_api_key = os.getenv("EXCHANGE_API_KEY")
 
 # 페이지 설정
-st.set_page_config(layout="wide", page_title="Korea Travel Guide: Pro Ver.")
+st.set_page_config(layout="wide", page_title="Korea Travel Guide: Classic Red")
+
+# [CSS 스타일 적용] 사이드바 태그: 다시 빨간색 + 하얀 글씨
+st.markdown(
+    """
+    <style>
+    /* 선택된 태그(버튼) 스타일 변경: 초기 빨간색으로 복구 */
+    span[data-baseweb="tag"] {
+        background-color: #FF4B4B !important; /* 스트림릿 기본 레드 계열 */
+        color: white !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
 # --- API 호출 함수들 ---
 def get_weather(lat, lng):
     if not weather_api_key: return None
+    # 보안 에러 방지를 위해 https 사용
     url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lng}&appid={weather_api_key}&units=metric"
     try:
         response = requests.get(url)
@@ -40,7 +55,7 @@ def get_exchange_rate():
         return response.json()['conversion_rates']['KRW'] if response.status_code == 200 else None
     except: return None
 
-# 2. 데이터 준비 (전국 10개 도시 풀 데이터)
+# 2. 데이터 준비 (전국 10개 도시, 관광지/맛집 각 5개씩)
 city_data = {
     "서울 (Seoul)": {"lat": 37.5665, "lng": 126.9780, 
         "spots": [
@@ -211,12 +226,12 @@ st.caption("Designed for international travelers - Find the best spots & routes.
 with st.sidebar:
     st.header("1. Travel Information")
     
-    # --- 환율 정보 표시 ---
+    # 환율
     rate = get_exchange_rate()
     if rate:
         st.success(f"💰 **Exchange Rate:** 1 USD ≈ {rate:,.0f} KRW")
     else:
-        st.warning("💰 Exchange rate unavailable (Check API Key)")
+        st.warning("💰 Exchange rate unavailable")
 
     st.divider()
 
@@ -224,18 +239,16 @@ with st.sidebar:
     selected_city_name = st.selectbox("Choose a city:", list(city_data.keys()))
     city_info = city_data[selected_city_name]
     
-    # --- 날씨 정보 표시 ---
+    # 날씨
     weather_data = get_weather(city_info['lat'], city_info['lng'])
     if weather_data:
         temp = weather_data['main']['temp']
         desc = weather_data['weather'][0]['description']
         icon = weather_data['weather'][0]['icon']
-        icon_url = f"http://openweathermap.org/img/wn/{icon}@2x.png"
-        
+        icon_url = f"https://openweathermap.org/img/wn/{icon}@2x.png"
         col_w1, col_w2 = st.columns([1, 2])
-        with col_w1:
-            st.image(icon_url, width=50)
-        with col_w2:
+        with col_w1: st.image(icon_url, width=50)
+        with col_w2: 
             st.write(f"**{temp}°C**")
             st.caption(f"{desc.capitalize()}")
     else:
@@ -243,71 +256,50 @@ with st.sidebar:
 
     st.divider()
     
-    # --- 관광지 선택 ---
+    # 관광지
     st.header("2. Recommend Spots")
     spot_options = {f"{s['name']} [{s['type']}]": s for s in city_info['spots']}
     all_spots = st.checkbox("Select All Spots", value=True)
-    if all_spots:
-        default_spots = list(spot_options.keys())
-    else:
-        default_spots = []
-    selected_spots = st.multiselect("Tourist Attractions:", options=list(spot_options.keys()), default=default_spots)
+    selected_spots = st.multiselect("Tourist Attractions:", options=list(spot_options.keys()), default=list(spot_options.keys()) if all_spots else [])
     
     st.divider()
 
-    # --- 맛집 선택 ---
+    # 맛집
     st.header("3. Recommend Restaurants")
     food_options = {f"{f['name']} [{f['type']}]": f for f in city_info['food']}
     all_foods = st.checkbox("Select All Restaurants", value=True)
-    if all_foods:
-        default_foods = list(food_options.keys())
-    else:
-        default_foods = []
-    selected_foods = st.multiselect("Restaurants (⭐3.5+):", options=list(food_options.keys()), default=default_foods)
+    selected_foods = st.multiselect("Restaurants (⭐3.5+):", options=list(food_options.keys()), default=list(food_options.keys()) if all_foods else [])
     
     st.divider()
 
-    # --- 순서 정하기 (여기가 핵심!) ---
+    # 순서 정하기
     st.header("4. Plan Your Route (Drag & Drop)")
-    st.caption("Drag items to reorder your itinerary.")
-    
     combined_items = selected_spots + selected_foods
-    
-    # streamlit-sortables를 이용한 드래그 앤 드롭 목록
-    if combined_items:
-        sorted_items = sort_items(combined_items, direction='vertical')
-    else:
-        sorted_items = []
+    sorted_items = sort_items(combined_items, direction='vertical') if combined_items else []
 
-    st.info("💡 Map updates automatically based on this order!")
-
-# 지도 데이터 정리 (정렬된 순서대로 마커 생성)
+# 지도 데이터 정리
 markers = []
 path_coords = []
-
-# sorted_items 순서대로 데이터 찾아서 넣기
 for key in sorted_items:
-    # 관광지에서 찾기
     if key in spot_options:
-        data = spot_options[key]
-        markers.append({"name": data['name'], "lat": data['lat'], "lng": data['lng'], "type": "Spot"})
-        path_coords.append({"lat": data['lat'], "lng": data['lng']})
-    # 맛집에서 찾기
+        d = spot_options[key]
+        markers.append({"name": d['name'], "lat": d['lat'], "lng": d['lng'], "type": "Spot"})
+        path_coords.append({"lat": d['lat'], "lng": d['lng']})
     elif key in food_options:
-        data = food_options[key]
-        markers.append({"name": data['name'], "lat": data['lat'], "lng": data['lng'], "type": "Food"})
-        path_coords.append({"lat": data['lat'], "lng": data['lng']})
+        d = food_options[key]
+        markers.append({"name": d['name'], "lat": d['lat'], "lng": d['lng'], "type": "Food"})
+        path_coords.append({"lat": d['lat'], "lng": d['lng']})
 
 markers_json = json.dumps(markers)
-center_lat = city_info['lat']
-center_lng = city_info['lng']
+center_lat, center_lng = city_info['lat'], city_info['lng']
 
-# 카카오맵 HTML/JS 코드
+# 카카오맵 HTML/JS 코드 (CSP 적용으로 HTTP 차단 방지)
 html_code = f"""
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
+    <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
     <title>Kakao Map</title>
     <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey={kakao_api_key}"></script>
     <style>
@@ -327,8 +319,13 @@ html_code = f"""
         markers.forEach(function(m) {{
             var position = new kakao.maps.LatLng(m.lat, m.lng);
             linePath.push(position);
-            var imageSrc = m.type === 'Food' ? "https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/marker_red.png" : "https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/markerStar.png";
-            var markerImage = new kakao.maps.MarkerImage(imageSrc, new kakao.maps.Size(24, 35)); 
+            
+            // 이미지 교체: 튼튼한 GitHub 호스팅 이미지
+            var imageSrc = m.type === 'Food' ? 
+                "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png" : 
+                "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-gold.png";
+            
+            var markerImage = new kakao.maps.MarkerImage(imageSrc, new kakao.maps.Size(25, 41)); 
             var marker = new kakao.maps.Marker({{ map: map, position: position, title: m.name, image: markerImage }});
             var infowindow = new kakao.maps.InfoWindow({{ content: '<div style="padding:5px;font-size:12px;">' + m.name + '</div>' }});
             kakao.maps.event.addListener(marker, 'mouseover', function() {{ infowindow.open(map, marker); }});
@@ -336,8 +333,9 @@ html_code = f"""
         }});
 
         if (linePath.length > 1) {{
-            var polyline = new kakao.maps.Polyline({{ path: linePath, strokeWeight: 5, strokeColor: '#FF0000', strokeOpacity: 0.7, strokeStyle: 'solid' }});
-            polyline.setMap(map);
+            new kakao.maps.Polyline({{
+                path: linePath, strokeWeight: 5, strokeColor: '#FF0000', strokeOpacity: 0.8, strokeStyle: 'solid'
+            }}).setMap(map);
             var bounds = new kakao.maps.LatLngBounds();
             linePath.forEach(function(coords) {{ bounds.extend(coords); }});
             map.setBounds(bounds);
@@ -350,11 +348,9 @@ html_code = f"""
 components.html(html_code, height=520)
 
 st.divider()
-if len(sorted_items) > 0:
-    st.subheader("📋 Your Final Itinerary")
-    st.write(f"**City:** {selected_city_name}")
-    
+if sorted_items:
+    st.subheader(f"📋 Your Itinerary in {selected_city_name}")
     for i, item in enumerate(sorted_items, 1):
         st.write(f"**{i}.** {item}")
 else:
-    st.write("👈 Select and order your spots to create a route.")
+    st.write("👈 Select spots and restaurants to create your route.")
